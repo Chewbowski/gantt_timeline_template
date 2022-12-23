@@ -1,0 +1,355 @@
+---
+title: "Sample Gantt Timeline Template | `r format(Sys.time(), '%m/%d/%Y')`"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r Setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+
+```{r Load_Packages}
+# Install Required Packages---------------------------------------------------
+
+# This code snippet is modified from a post at
+# (https://stackoverflow.com/questions/9341635/check-for-installed-packages-before-running-install-packages)
+
+
+# Required packages
+mypackages <- c(
+  "tidyverse",
+  "lubridate",
+  "plotly",
+  "crosstalk",
+  "htmlwidgets",
+  "htmltools",
+  "DT",
+  "scales",
+  "odbc",
+  "DBI",
+  "skimr",
+  "janitor",
+  "readxl",
+  "ggdist",
+  "tidyquant",
+  "DataExplorer",
+  "dbscan"
+)
+
+
+# Checks for and installs missing packages
+for (p in mypackages) {
+  if (!require(p, character.only = TRUE)) {
+    install.packages(p)
+    library(p, character.only = TRUE)
+  }
+}
+
+remove(mypackages)
+remove(p)
+```
+
+
+```{r Load_Data}
+
+timeline_df <- read_csv('sample_gantt_timeline_data.csv')
+
+```
+
+
+```{r create_sorted_dataframe}
+
+gantt_df <- 
+  timeline_df %>% 
+  mutate(Start = mdy(Start),
+         End = mdy(End)) %>% 
+  group_by(Category) %>%
+  mutate(min_start = min(Start)) %>% 
+  ungroup() %>% 
+  arrange(min_start,
+          Category,
+          Start,
+          End) %>%
+  mutate(srt = row_number()) %>% 
+  ungroup()
+
+```
+
+
+```{r}
+
+# will need to customize for user categories
+
+clr_pal <- c(
+  'Category 1' = '#1A237E',
+  'Category 2' = '#0277BD',
+  'Category 3' = '#009688',
+  'Category 4' = '#004D40',
+  'Category 5' = '#EF5350',
+  'Category 6' = '#880E4F',
+  'Launch' = '#FF6F00'
+)
+
+```
+
+
+```{r}
+
+y_labels <- function(n, s){fct_reorder(str_wrap(n, 60, exdent = 2), desc(s))}
+
+```
+
+
+```{r}
+
+curr_day <- today()
+
+
+vline <- function(x = 0, color = '#BDBDBD') {
+  list(
+    type = 'line',
+    y0 = 0,
+    y1 = 1,
+    yref = 'paper',
+    x0 = x,
+    x1 = x,
+    line = list(color = color,
+                dash = 'dash')
+  )
+}
+
+
+vline_text <- function(x = 0, color = '#000000') {
+  list(
+    type = 'text',
+    y = 0,
+    yref = 'paper',
+    x = x,
+    text = paste0('<i>', format(today(), '%m/%d/%Y'), '</i>'),
+    showarrow = FALSE,
+    bgcolor = '#FFFFFF'
+  )
+} 
+
+
+
+
+gantt_plot <-
+  
+  gantt_df %>%
+  
+  plot_ly(
+    x = ~ Start,
+    xend = ~ End,
+    y = ~ y_labels(Item, srt),
+    yend = ~ y_labels(Item, srt)
+  ) %>%
+  
+  add_segments(
+    color = ~ fct_reorder(Category,
+                          srt),
+    colors = clr_pal,
+    line = list(width = 15),
+    text = ~ paste0(
+      'Step: <b>',
+      Item,
+      '</b><br>',
+      'Category: <b>',
+      Category,
+      '</b><br>',
+      'Weeks: <b>',
+      Weeks,
+      '</b><br>',
+      'Start: <b>',
+      Start,
+      '</b><br>',
+      'End: <b>',
+      End,
+      '</b>'
+    ),
+    hoverinfo = 'text',
+    textposition = 'none'
+  ) %>%
+  
+  add_text(x = ~ Start - days(1),
+           text = ~ format(Start, '%m/%d/%y'),
+           textposition = 'middle left',
+           color = ~ Category,
+           colors = clr_pal,
+           hoverinfo = 'none',
+           showlegend = FALSE) %>% 
+  
+  add_text(x = ~ End + days(1),
+           text = ~ format(End, '%m/%d/%y'),
+           textposition = 'middle right',
+           color = ~ Category,
+           colors = clr_pal,
+           hoverinfo = 'none',
+           showlegend = FALSE) %>%   
+  
+  layout(
+    
+    shapes = list(vline(curr_day)),
+
+    annotations = list(vline_text(curr_day)),
+    
+    xaxis = list(
+      range = ~ c(min(Start) - days(14),
+                  max(End) + days(14)),
+      zeroline = FALSE,
+      title = '<b>Date</b>'
+    ),
+    
+    yaxis = list(
+      title = FALSE,
+      gridcolor = '#BDBDBD',
+      tickprefix = '<b>  ',
+      ticksuffix = '</b>'
+    ),
+    legend = list(
+      orientation = 'h',
+      x = 0,
+      xanchor = 'left',
+      y = -0.10,
+      title = list(text = '<b>Category </b>',
+                   side = 'center-left')
+    ),
+    title = list(text = '<b>Sample Gantt Timeline',
+                 x = 0.05)
+  )
+
+```
+
+
+```{r}
+
+days_barplot <-
+  
+  gantt_df %>%
+  
+  plot_ly(
+    x = ~ Weeks,
+    y = ~ y_labels(Item, srt),
+    color = ~ fct_reorder(Category,
+                          srt),
+    colors = clr_pal,
+    showlegend = FALSE
+  ) %>%
+  add_bars(
+    marker = list(width = 30),
+    text = ~ paste0(
+      'Step: <b>',
+      Item,
+      '</b><br>',
+      'Category: <b>',
+      Category,
+      '</b><br>',
+      'Weeks: <b>',
+      Weeks,
+      '</b><br>',
+      'Start: <b>',
+      Start,
+      '</b><br>',
+      'End: <b>',
+      End,
+      '</b>'
+    ),
+    hoverinfo = 'text',
+    textposition = 'none'
+  ) %>%
+  add_text(
+    text = ~ paste0(' <b>', Weeks, '</b>'),
+    textposition = 'right',
+    hoverinfo = 'none'
+  ) %>%
+  layout(xaxis = list(
+    title = '<b>Estimated Weeks to Complete</b>',
+    range = ~ c(0,
+                max(Weeks) * 1.25),
+    zeroline = FALSE
+  ))
+
+
+```
+
+
+### Timeline
+
+```{r}
+
+subplot(nrows = 1,
+        widths = c(0.75, 0.25),
+        shareX = FALSE,
+        shareY = TRUE,
+        titleX = TRUE,
+        
+        gantt_plot,
+        
+        days_barplot) %>% 
+
+  config(displaylogo = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
